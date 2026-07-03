@@ -3,8 +3,15 @@
 # wait-for-health.sh — poll docker compose health until the core services are
 # healthy, or time out (~120s). Prints per-service status as it goes.
 #
-# Core services: postgres, aeon, nexus-agentd.
+# Core services: postgres, aeon, aeon-worker, nexus-agentd.
 #
+# aeon-worker matters here, not just cosmetically: with `aeon` pinned to
+# MEMORYOS_ROLE=proxy, EXTRACTION_OUTBOX_ENABLED defaults to true, so the
+# proxy *always* enqueues extraction jobs instead of running them inline —
+# only a MEMORYOS_ROLE=worker process drains that queue. If aeon-worker is
+# down, chat completions keep succeeding but no memory is ever persisted,
+# silently. Waiting on its healthcheck here means a broken worker fails
+# start.sh loudly instead of failing invisibly later.
 set -euo pipefail
 
 # ---- colored helpers --------------------------------------------------------
@@ -21,7 +28,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 cd "$ROOT_DIR"
 
-SERVICES=(postgres aeon nexus-agentd)
+SERVICES=(postgres aeon aeon-worker nexus-agentd)
 TIMEOUT="${WAIT_TIMEOUT:-120}"   # seconds
 INTERVAL=3                       # seconds between polls
 

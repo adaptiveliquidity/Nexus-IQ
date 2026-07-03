@@ -86,7 +86,7 @@ DEFINED=""
 DEFINED="$(compose config --services 2>/dev/null || true)"
 DEFINED_TOOLS=""
 DEFINED_TOOLS="$(compose --profile tools config --services 2>/dev/null || true)"
-for svc in postgres aeon nexus-agentd nexus-mcp; do
+for svc in postgres aeon aeon-worker nexus-agentd nexus-mcp; do
   # nexus-mcp is profile-gated (--profile tools) and won't appear in the
   # default service list. Check the tools-profile listing for it specifically.
   if [[ "$svc" == "nexus-mcp" ]]; then
@@ -117,6 +117,19 @@ if [[ "$health_code" == "200" ]]; then
   pass "AEON-IQ /health returns 200"
 else
   fail "AEON-IQ /health did not return 200 (got '${health_code:-no-response}' at ${AEON_BASE})"
+fi
+
+# ---- 4b. AEON-IQ worker healthy ---------------------------------------------
+# aeon-worker has no host port, so probe it inside its own container. This
+# check matters: with `aeon` pinned to MEMORYOS_ROLE=proxy,
+# EXTRACTION_OUTBOX_ENABLED defaults to true, so extraction jobs are only ever
+# enqueued, never run inline — only aeon-worker (MEMORYOS_ROLE=worker) drains
+# that queue. A dead worker means chat completions keep succeeding while no
+# memory is ever persisted, with no other visible symptom.
+if compose exec -T aeon-worker curl -sf -m 10 http://localhost:8080/health >/dev/null 2>&1; then
+  pass "AEON-IQ worker /health returns 200"
+else
+  fail "AEON-IQ worker /health check failed — extraction jobs will queue but never drain"
 fi
 
 # ---- 5. management API authed (200 WITH key, 401/403 WITHOUT) ---------------

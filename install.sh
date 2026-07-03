@@ -152,10 +152,20 @@ bash "${ROOT_DIR}/scripts/validate-env.sh"
 if [[ "${NEXUSIQ_USE_PREBUILT:-false}" == "true" ]]; then
   run_step "Prebuilt-image mode (NEXUSIQ_USE_PREBUILT=true)"
   PREBUILT_TAG="${NEXUSIQ_IMAGE_TAG:-latest}"
+  if [[ -z "${NEXUSIQ_IMAGE_TAG:-}" ]]; then
+    # Unlike the source-build path (SHA-pinned via NEXUSIQ_NEXUS_REF /
+    # NEXUSIQ_AEON_REF), `latest` floats: it is whatever each repo's
+    # tag-triggered publish.yml most recently pushed, independent of this
+    # kit's own VERSION_MATRIX row. Two operators running this same install.sh
+    # on different days can silently get different Nexus/AEON-IQ builds. Once
+    # a real kit release is tagged, set NEXUSIQ_IMAGE_TAG to that release's
+    # tag (see VERSION_MATRIX.md) for a reproducible pull.
+    warn "NEXUSIQ_IMAGE_TAG not set — pulling the floating ':latest' tag, which is NOT pinned to this kit's VERSION_MATRIX row and is not reproducible across installs. Set NEXUSIQ_IMAGE_TAG=<release tag> once one exists."
+  fi
   # Only set the image refs if the operator hasn't overridden them.
   grep -q '^NEXUS_IMAGE=' "${ROOT_DIR}/.env" 2>/dev/null     || echo "NEXUS_IMAGE=ghcr.io/adaptiveliquidity/nexusiq-nexus:${PREBUILT_TAG}" >> "${ROOT_DIR}/.env"
   grep -q '^AEON_IQ_IMAGE=' "${ROOT_DIR}/.env" 2>/dev/null     || echo "AEON_IQ_IMAGE=ghcr.io/adaptiveliquidity/aeon-iq:${PREBUILT_TAG}" >> "${ROOT_DIR}/.env"
-  ok "image refs pinned in .env (tag: ${PREBUILT_TAG})"
+  ok "image refs set in .env (tag: ${PREBUILT_TAG})"
   if compose pull aeon aeon-worker nexus-agentd; then
     ok "prebuilt images pulled"
   else
